@@ -1,0 +1,17 @@
+[package]
+name = "flood-predictor"
+version = "0.1.0"
+keywords = ["usgs", "flash-flooding"]
+categories = ["command-line-utilities"]
+repository = "https://github.com/awkless/flood-predictor.git"
+readme = "README.md"
+authors = [
+    "Jason Pena <jasonpena@awkless.com>",
+    "Carlos Ramirez <carlosjrcem@gmail.com>",
+    "Vincent Sanchez <vsanche1@nmsu.edu>"
+]
+edition = "2021"
+license = "MIT"
+rust-version = "1.82.0"
+
+[dependencies]
