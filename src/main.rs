@@ -1,4 +1,4 @@
-use crate::foo;
+use flood_predictor::foo;
 
 fn main() {
     foo();
