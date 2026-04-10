@@ -1,1 +1,6 @@
 /target/
+**/.lgd-nfy0/
+*.egg-info
+.lgd-nfy0
+__pycache__/
+.venv
