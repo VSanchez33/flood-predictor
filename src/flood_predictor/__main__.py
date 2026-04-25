@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from torch.optim import Adam
+import torch.nn.functional as F
 
 def load_and_merge(gage_file, discharge_file):
     gage = pd.read_csv(gage_file, parse_dates=["time"])
@@ -33,16 +34,46 @@ class FlashFloodDataset(Dataset):
         x = self.data[index:index+self.seq_len]
         y = self.labels[index+self.seq_len]
         return torch.tensor(x), torch.tensor(y)
+    
+class CausalConv1d(nn.Module):
+    def __init__(self, in_ch, out_ch, kernel_size, dilation):
+        super().__init__()
+        self.pad = (kernel_size - 1) * dilation
+        self.conv = nn.Conv1d(
+            in_ch, out_ch, kernel_size,
+            padding=0,
+            dilation=dilation
+        )
+
+    def forward(self, x):
+        x = F.pad(x, (self.pad, 0))
+        return self.conv(x)
+    
+class ResidualBlock(nn.Module):
+    def __init__(self, channels, kernel_size, dilation):
+        super().__init__()
+        self.conv1 = CausalConv1d(channels, channels, kernel_size, dilation)
+        self.relu = nn.ReLU()
+        self.conv2 = CausalConv1d(channels, channels, kernel_size, dilation)
+
+    def forward(self, x):
+        out = self.relu(self.conv1(x))
+        out = self.conv2(out)
+        return self.relu(out + x)
 
 class TCN(nn.Module):
     def __init__(self, input_size=3, hidden_size=16, kernel_size=2, output_size=1):
         super(TCN, self).__init__()
+
         self.tcn = nn.Sequential(
-            nn.Conv1d(input_size, hidden_size, kernel_size, padding=kernel_size-1),
+            CausalConv1d(input_size, hidden_size, kernel_size, dilation=1),
             nn.ReLU(),
-            nn.Conv1d(hidden_size, hidden_size, kernel_size, padding=kernel_size-1),
-            nn.ReLU()
+
+            ResidualBlock(hidden_size, kernel_size, dilation=1),
+            ResidualBlock(hidden_size, kernel_size, dilation=2),
+            ResidualBlock(hidden_size, kernel_size, dilation=4),
         )
+
         self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
@@ -51,6 +82,7 @@ class TCN(nn.Module):
         y = y[:, :, -1]
         y = self.fc(y)
         return y.squeeze()
+
 
 def main() -> int:
     start_time = time.time()
