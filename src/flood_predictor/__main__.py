@@ -20,19 +20,22 @@ def load_and_merge(gage_file, discharge_file):
     return data
 
 class FlashFloodDataset(Dataset):
-    def __init__(self, df, seq_len):
+    def __init__(self, df, seq_len, horizon):
         self.seq_len = seq_len
+        self.horizon = horizon
+
         df = df.copy()
         df["gage_diff"] = df["gage_height"].diff().fillna(0)
+
         self.data = df[["gage_height", "discharge", "gage_diff"]].values.astype(np.float32)
         self.labels = df["gage_height"].values.astype(np.float32)
 
     def __len__(self):
-        return len(self.data) - self.seq_len
+        return len(self.data) - self.seq_len - self.horizon
 
     def __getitem__(self, index):
         x = self.data[index:index+self.seq_len]
-        y = self.labels[index+self.seq_len]
+        y = self.labels[index+self.seq_len+self.horizon]
         return torch.tensor(x), torch.tensor(y)
     
 class CausalConv1d(nn.Module):
@@ -100,8 +103,9 @@ def main() -> int:
     print("---TRAIN/TEST SPLIT STEP---")
     SEQ_LEN = 72 # number of past timestamps to look at
     THRESHOLD = 2.20 # hardcoded flash flood threshold
+    HORIZON = 12 # 12 * 5 minutes = 1 hour
 
-    dataset = FlashFloodDataset(data, SEQ_LEN)
+    dataset = FlashFloodDataset(data, SEQ_LEN, HORIZON)
 
     train_size = int(0.8 * len(dataset))
 
@@ -166,6 +170,15 @@ def main() -> int:
           [f"{p:.3f}%" for p in alert_probs_percent[:10]])
 
     print("Predicted heights (first 10):", np.round(all_preds[:10], 3))
+
+    torch.save({
+        "model_state_dict": model.state_dict(),
+        "mean": mean,
+        "std": std,
+        "seq_len": SEQ_LEN,
+        "horizon": HORIZON,
+        "threshold": THRESHOLD
+    }, "flood_predictor_model.pth")
 
     total_time = time.time() - start_time
     hours = int(total_time // 3600)
